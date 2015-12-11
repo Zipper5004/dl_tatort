@@ -1,10 +1,11 @@
 #! /bin/ksh
 #benoetigt: ksh awk
-#optional: notify-send sendmail
-#script_version: 1.02
+#optional: notify-send mailutils
+#script_version: 1.04
 
 #variabeln
 mediathek="http://mediathek.daserste.de/suche?searchText=tatort&topRessort=-&sort=date"
+mediathek2="http://mediathek.daserste.de/suche?searchText=tatort&sort=date&words=and&mresults=page.2"
 thetvdb="http://thetvdb.com/?tab=seasonall&id=83214&lid=14"
 datetime=$(date "+%Y-%m-%d_%H")
 fulldate=$(date "+%Y-%m-%d %H:%M:%S")
@@ -23,10 +24,11 @@ echo "$(date "+%Y-%m-%d %H:%M:%S"): $0"
 #d = directory to save files
 #i = id for movie
 #m = mail when download is done
+#n = seasonname
 #q = quiet download # hide wget's output
 #r = remote directory to save files if connected (e.g. usb drive)
 #v = url to direct download #not done yet
-while getopts "d:i:r:v:q:" opt; do
+while getopts "d:i:r:v:q:m:n:" opt; do
   #
   case $opt in
      d) 
@@ -36,10 +38,15 @@ while getopts "d:i:r:v:q:" opt; do
      i)
       documentId="$OPTARG"
       filename=${filename}_${documentId}
-      echo "$fulldate documentId: $documentId"
+      echo "$(date "+%Y-%m-%d %H:%M:%S"): documentId: $documentId"
       ;;
 	 m)
       mail="$OPTARG"
+	  echo "mail: $mail"
+	  ;;
+	 n)
+      saesonname="$OPTARG"
+	  echo "saesonname: $saesonname"
 	  ;;
 	 q)
       q="--quiet"
@@ -47,13 +54,14 @@ while getopts "d:i:r:v:q:" opt; do
      r)
       if [ -d "$OPTARG" ]; then
        dlfolder="$OPTARG"
+	   echo "remote-dir: $dlfolder"
       fi;
       ;;
      v) echo $OPTARG
       exit 1
       ;;
      \?)
-      echo "$fulldate Unbekannte Option: -$OPTARG ($OPTIND)"
+      echo "$(date "+%Y-%m-%d %H:%M:%S"): Unbekannte Option: -$OPTARG ($OPTIND)"
       ;;
   esac
 done
@@ -78,7 +86,7 @@ if [[ $? > 0 ]]; then
    echo "$(date "+%Y-%m-%d %H:%M:%S"): -2: $? Fehler beim Aufruf der Mediathek: ${mediathek}" >&2
    exit 2
 fi
-echo "$fulldate: ${filename}"
+echo "$(date "+%Y-%m-%d %H:%M:%S"): ${filename}"
 
 if [[ ${#documentId} == 0 ]]; then
 
@@ -89,9 +97,11 @@ if [[ ${#documentId} == 0 ]]; then
  documentId=$( awk '{
     v=index($0,"Video-tgl-ab-20-U");
     i=index($0,"documentId");
-    if (v>0 && i>0) {
-        s=substr($0,i+11,10);
-        d=substr(s,0,index(s,"&")-1);
+	j=index($0,"Tatort");
+	h=index($0,"H%C3%B6rfassung");
+    if (v>0 && i>0 && j>0 && h<1) {
+        s=substr($0,i+11,15);
+        d=substr(s,0,index(s,"&"));
         print d;
         exit;
     }
@@ -101,6 +111,7 @@ if [[ ${#documentId} == 0 ]]; then
     echo "$(date "+%Y-%m-%d %H:%M:%S"): -3: Keine Videos gefunden" >&2
     exit 3
  fi
+ echo "$(date "+%Y-%m-%d %H:%M:%S"): documentId: $documentId"
 
  #Staffelname / Folge
  #saesonname=$( awk '{
@@ -121,30 +132,81 @@ if [[ ${#documentId} == 0 ]]; then
 #	}
 # }' $filename);
 #else
- #Staffelname / Folge
- saesonname=$( awk '{
-    v=index($0,$documentId);
-    i=index($0,"Tatort/");
-    si=substr($0,i+7,50);
-    j=index(si,"Tatort-");
-    if (v>0 && i>0) {
-        if( j > 0 ) {
-          d=substr(si,j+7,29);
-        } else {
-          d=substr(js,0,29);
-        }
-        print d;
-        exit;
-    }
- }' $filename);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 fi #documentId was filled
+
+#Staffelname / Folge
+if [[ ${#saesonname} == 0 ]]; then
+	saesonname=$( awk -vdocumentId="$documentId" '{
+	   v=index($0,documentId);
+	   i=index($0,"Tatort/");
+	   si=substr($0,i+7,50);
+	   j=index(si,"Tatort-");
+	   if (v>0 && i>0) {
+		   if( j > 0 ) {
+			 d=substr(si,j+7,29);
+		   } else {
+			 d=substr(si,0,index(si,"-tgl-"));
+		   }
+		   print d;
+		   exit;
+	   }
+	}' $filename);
+fi
+
 saesonname=$(echo $saesonname | awk '{gsub("-Video-tgl-ab-20-",""); print $0}')
+saesonname=$(echo $saesonname | awk '{gsub("-Video",""); print $0}')
+saesonname=$(echo $saesonname | awk '{gsub("-H%C3%B6rfassung",""); print $0}')
 
 if [[ ${#saesonname} == 0 ]]; then
-    echo "$(date "+%Y-%m-%d %H:%M:%S"): -4: Kein saesonname fuer documentId=$documentId in $filename gefunden." >&2
-    exit 4
+
+	#neuer Versuch auf Seite 2
+	#Mediathek aufrufen
+	wget -q "${mediathek2}" -O "${filename}" >/dev/null
+	echo "$(date "+%Y-%m-%d %H:%M:%S"): mediathek2: ${filename}"
+	
+	#Staffelname / Folge
+	saesonname=$( awk -vdocumentId="$documentId" '{
+	   v=index($0,documentId);
+	   i=index($0,"Tatort/");
+	   si=substr($0,i+7,50);
+	   j=index(si,"Tatort-");
+	   if (v>0 && i>0) {
+		   if( j > 0 ) {
+			 d=substr(si,j+7,29);
+		   } else {
+			 d=substr(si,0,index(si,"-tgl-"));
+		   }
+		   print d;
+		   exit;
+	   }
+	}' $filename);
+	
+	#sonst Fehler
+	if [[ ${#saesonname} == 0 ]]; then
+		echo "$(date "+%Y-%m-%d %H:%M:%S"): -4: Kein saesonname fuer documentId='$documentId' in '$filename' gefunden." >&2
+		exit 4
+	fi
 fi
+
+echo "$(date "+%Y-%m-%d %H:%M:%S"): Seasonname: ${saesonname}"
+#exit 1
 
 if [ -f "${saesonname}.done" ]; then
     echo "$(date "+%Y-%m-%d %H:%M:%S"): -5: ${saesonname}: Video bereits geladen." >&2
@@ -189,14 +251,14 @@ echo "$(date "+%Y-%m-%d %H:%M:%S"): ${filenameTVDB}"
 videoname=$( awk -vvname="$saesonname" '{
     v=index($0,vname);
     if (v>0) {
-        href=substr($0,index($0,"<a href=")+9)
-        href=substr(href,0,index(href,">")-2)
+        href=substr($0,index($0,"<a href=")+8)
+        href=substr(href,0,index(href,">")-1)
         s=substr($0,index($0,href) + length(href)+2);
-        season=substr(s,0,index(s,"</a>")-1)
-        href=substr(s,index(s,"<a href=")+9)
-        href=substr(href,0,index(href,">")-2)
+        season=substr(s,0,index(s,"</a>"))
+        href=substr(s,index(s,"<a href=")+8)
+        href=substr(href,0,index(href,">")-1)
         s=substr(s,index(s,href) + length(href)+2);
-        name=substr(s,href,index(s,"</a>")-1)
+        name=substr(s,href,index(s,"</a>"))
         print "Tatort_S" season "_" name ".mp4";
         exit;
     }
@@ -223,9 +285,9 @@ else
 	    b=index($0,"_S")
 	    season=substr($0,b+2,v-b-2)
 	    begin=substr($0,0,v)
-	    s=substr($0,length(begin)+3)
+	    s=substr($0,length(begin)+4)
 	    b=index(s,"_")
-	    episode=substr(s,0,b-1)
+	    episode=substr(s,0,b)
 	    s=substr(s,length(episode)+1)
 	    if(length(episode) < 2) { episode=0 episode; }
 	    print "Tatort_S" season "E" episode s
@@ -233,8 +295,8 @@ else
 	videoname=$(echo $videoname | awk '{gsub(" ","_"); print $0}')
 
 	if [[ ${#videoname} == 0 ]]; then
-	    echo "-5: Kein Videoname gefunden."
-	    exit 5
+	    echo "-6: Kein Videoname gefunden."
+	    exit 6
 	fi
 fi
 
@@ -251,10 +313,11 @@ if [[ $? > 0 ]]; then
     echo "-10: $? Fehler beim Aufruf der Mediathek: ${mediathekDL}" >&2
     exit 10
 fi
-echo "$(date "+%Y-%m-%d %H:%M:%S"): ${filenameMediaJSON}"
+echo "$(date "+%Y-%m-%d %H:%M:%S"): filenameMediaJSON: ${filenameMediaJSON}"
 
 mediathekDL=$( awk '{
     v=index($0,"_quality");
+	out="";
     if (v>0) {
         s=$0;
         while(length(s) > 0) {
@@ -262,14 +325,26 @@ mediathekDL=$( awk '{
             d=index(s,":");
             k=index(s,",");
             q=substr(s,d+1,k-d-1);
-            if(q == 3) {
-            s=substr(s,index(s,"_stream")+10);
-            d=index(s,"\"");
-            json=substr(s,0,d-1);
-            print json;
-        }
-    }
+
+            if(q == 2) {
+				s=substr(s,index(s,"_stream")+10);
+				d=index(s,"\"");
+				json=substr(s,0,d);
+
+
+
+				out=json;
+			}
+			if(q == 3) {
+
+				s=substr(s,index(s,"_stream")+10);
+				d=index(s,"\"");
+				json=substr(s,0,d);
+				out=json;
+			}
+		}
         d=substr(s,0,index(s,"_stream")+3);
+		print out;
         exit;
     }
 }' $filenameMediaJSON);
@@ -293,7 +368,8 @@ if [[ $? = 0 ]]; then
     notify-send "Speichere ${videoname}"
 fi
 
-wget ${q} "${mediathekDL}" -O "${videoname}.filepart" >/dev/null
+echo "Und los: wget '${q}' '${mediathekDL}' -O '${videoname}.filepart'"
+wget ${q} "${mediathekDL}" -O "${videoname}.filepart"
 
 #Fehler beim Aufruf
 if [[ $? > 0 ]]; then
@@ -326,5 +402,8 @@ fi
 
 if [[ ${#mail} > 0 ]]; then
  echo "dl_datort.sh: ${videoname} heruntergeladen" > mail.txt
- mail -s "dl_datort.sh: ${videoname} heruntergeladen" -r "dl_tatort@nobody.com" ${mail} < mail.txt
+ mail -s "dl_datort.sh: ${videoname} heruntergeladen" -r "test@hkgame.de" ${mail} < mail.txt
 fi
+
+ echo "dl_datort.sh: ${videoname} heruntergeladen" > mail.txt
+# mail -s "dl_datort.sh: ${videoname} heruntergeladen" -r "test@hkgame.de" "zipper5004@yahoo.de" < mail.txt
