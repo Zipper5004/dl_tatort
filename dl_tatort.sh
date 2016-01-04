@@ -133,22 +133,6 @@ if [[ ${#documentId} == 0 ]]; then
 # }' $filename);
 #else
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 fi #documentId was filled
 
 #Staffelname / Folge
@@ -218,8 +202,8 @@ start="${saesonname}"
 touch "${start}.start"
 
 #SQL insert
-sqlite3 tatorte.db <<EOSQL
-	insert into tartort_history values('${saesonname}',0,date('now'));
+sqlite3 tatorte.sqlite <<EOSQL
+	insert into tatort_history values('${saesonname}','','',0,date('now'));
 EOSQL
 
 saesonname=$(echo $saesonname | awk '{gsub("-"," "); print $0}')
@@ -385,9 +369,11 @@ fi
 mv "${videoname}.filepart" "${videoname}"
 mv "${start}.start" "${start}.done"
 
+commissar=$(echo $videoname | awk '{split($0,a,"_"); print a[3]}')
+
 #SQL update
-sqlite3 tatorte.db <<EOSQL
-	update tartort_history set state = 1 where movie_name='${saesonname}';
+sqlite3 tatorte.sqlite <<EOSQL
+	update tatort_history set state = 1, movie_name_long = '$videoname', commissar = '$commissar' where movie_name='${saesonname}';
 EOSQL
 
 echo "$(date "+%Y-%m-%d %H:%M:%S"): ${mediathekDL}"
