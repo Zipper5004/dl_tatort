@@ -1,7 +1,7 @@
 #! /bin/ksh
 #benoetigt: ksh awk
 #optional: notify-send mailutils
-#script_version: 1.04
+#script_version: 1.05
 
 #variabeln
 mediathek="http://mediathek.daserste.de/suche?searchText=tatort&topRessort=-&sort=date"
@@ -113,26 +113,25 @@ if [[ ${#documentId} == 0 ]]; then
  fi
  echo "$(date "+%Y-%m-%d %H:%M:%S"): documentId: $documentId"
 
- #Staffelname / Folge
- #saesonname=$( awk '{
- #   v=index($0,"Video-tgl-ab-20-Uhr");
- #   i=index($0,"Tatort/");
-#	j=index($0,"Polizeiruf-110/");
-#    h=index($0,"Hörfassung");
- #   if (v>0 && i>0 && h == 0) {
- #       s=substr($0,i+7);
- #       d=substr(s,0,index(s,"-Video-tgl-ab-20-Uhr")-1);
- #       print d;
- #       exit;
- #   } else if (v>0 && j>0 && h == 0) {
-#		s=substr($0,j+15);
-#        d=substr(s,0,index(s,"-Video-tgl-ab-20-Uhr")-1);
-#        print d;
-#        exit;
-#	}
-# }' $filename);
-#else
 
+else
+#32528114
+ saesonname=$( awk -vdocumentId="$documentId" '{
+  v=index($0,documentId);
+  i=index($0,"Tatort/");
+  si=substr($0,i+7,50);
+  j=index(si,"Tatort-");
+  if (v>0 && i>0) {
+	if( j > 0 ) {
+	 d=substr(si,j+7,29);
+	} else {
+	 d=substr(si,0,index(si,"-Video-tgl-"));
+	}
+	print d;
+	exit;
+  }
+}' $filename);
+exit 1
 fi #documentId was filled
 
 #Staffelname / Folge
@@ -146,7 +145,7 @@ if [[ ${#saesonname} == 0 ]]; then
 		   if( j > 0 ) {
 			 d=substr(si,j+7,29);
 		   } else {
-			 d=substr(si,0,index(si,"-tgl-"));
+			 d=substr(si,0,index(si,"-Video-tgl-"));
 		   }
 		   print d;
 		   exit;
