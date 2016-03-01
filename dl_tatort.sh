@@ -1,11 +1,12 @@
 #! /bin/ksh
 #benoetigt: ksh awk
 #optional: notify-send mailutils
-#script_version: 1.05
+#script_version: 1.06
 
 #variabeln
 mediathek="http://mediathek.daserste.de/suche?searchText=tatort&topRessort=-&sort=date"
 mediathek2="http://mediathek.daserste.de/suche?searchText=tatort&sort=date&words=and&mresults=page.2"
+mediathek3="http://mediathek.daserste.de/suche?searchText=tatort&sort=date&words=and&mresults=page.3"
 thetvdb="http://thetvdb.com/?tab=seasonall&id=83214&lid=14"
 datetime=$(date "+%Y-%m-%d_%H")
 fulldate=$(date "+%Y-%m-%d %H:%M:%S")
@@ -28,7 +29,7 @@ echo "$(date "+%Y-%m-%d %H:%M:%S"): $0"
 #q = quiet download # hide wget's output
 #r = remote directory to save files if connected (e.g. usb drive)
 #v = url to direct download #not done yet
-while getopts "d:i:r:v:q:m:n:" opt; do
+while getopts "d:i:r:v:qm:n:" opt; do
   #
   case $opt in
      d) 
@@ -45,8 +46,8 @@ while getopts "d:i:r:v:q:m:n:" opt; do
 	  echo "mail: $mail"
 	  ;;
 	 n)
-      saesonname="$OPTARG"
-	  echo "saesonname: $saesonname"
+      seasonname="$OPTARG"
+	  echo "seasonname: $seasonname"
 	  ;;
 	 q)
       q="--quiet"
@@ -116,7 +117,7 @@ if [[ ${#documentId} == 0 ]]; then
 
 else
 #32528114
- saesonname=$( awk -vdocumentId="$documentId" '{
+ seasonname=$( awk -vdocumentId="$documentId" '{
   v=index($0,documentId);
   i=index($0,"Tatort/");
   si=substr($0,i+7,50);
@@ -131,12 +132,11 @@ else
 	exit;
   }
 }' $filename);
-exit 1
 fi #documentId was filled
 
 #Staffelname / Folge
-if [[ ${#saesonname} == 0 ]]; then
-	saesonname=$( awk -vdocumentId="$documentId" '{
+if [[ ${#seasonname} == 0 ]]; then
+	seasonname=$( awk -vdocumentId="$documentId" '{
 	   v=index($0,documentId);
 	   i=index($0,"Tatort/");
 	   si=substr($0,i+7,50);
@@ -153,11 +153,11 @@ if [[ ${#saesonname} == 0 ]]; then
 	}' $filename);
 fi
 
-saesonname=$(echo $saesonname | awk '{gsub("-Video-tgl-ab-20-",""); print $0}')
-saesonname=$(echo $saesonname | awk '{gsub("-Video",""); print $0}')
-saesonname=$(echo $saesonname | awk '{gsub("-H%C3%B6rfassung",""); print $0}')
+seasonname=$(echo $seasonname | awk '{gsub("-Video-tgl-ab-20-",""); print $0}')
+seasonname=$(echo $seasonname | awk '{gsub("-Video",""); print $0}')
+seasonname=$(echo $seasonname | awk '{gsub("-H%C3%B6rfassung",""); print $0}')
 
-if [[ ${#saesonname} == 0 ]]; then
+if [[ ${#seasonname} == 0 ]]; then
 
 	#neuer Versuch auf Seite 2
 	#Mediathek aufrufen
@@ -165,7 +165,7 @@ if [[ ${#saesonname} == 0 ]]; then
 	echo "$(date "+%Y-%m-%d %H:%M:%S"): mediathek2: ${filename}"
 	
 	#Staffelname / Folge
-	saesonname=$( awk -vdocumentId="$documentId" '{
+	seasonname=$( awk -vdocumentId="$documentId" '{
 	   v=index($0,documentId);
 	   i=index($0,"Tatort/");
 	   si=substr($0,i+7,50);
@@ -182,30 +182,59 @@ if [[ ${#saesonname} == 0 ]]; then
 	}' $filename);
 	
 	#sonst Fehler
-	if [[ ${#saesonname} == 0 ]]; then
-		echo "$(date "+%Y-%m-%d %H:%M:%S"): -4: Kein saesonname fuer documentId='$documentId' in '$filename' gefunden." >&2
-		exit 4
+	if [[ ${#seasonname} == 0 ]]; then
+	
+		#neuer Versuch auf Seite 3
+		#Mediathek aufrufen
+		wget -q "${mediathek3}" -O "${filename}" >/dev/null
+		echo "$(date "+%Y-%m-%d %H:%M:%S"): mediathek3: ${filename}"
+		
+		#Staffelname / Folge
+		seasonname=$( awk -vdocumentId="$documentId" '{
+		   v=index($0,documentId);
+		   i=index($0,"Tatort/");
+		   si=substr($0,i+7,50);
+		   j=index(si,"Tatort-");
+		   if (v>0 && i>0) {
+			   if( j > 0 ) {
+				 d=substr(si,j+7,29);
+			   } else {
+				 d=substr(si,0,index(si,"-tgl-"));
+			   }
+			   print d;
+			   exit;
+		   }
+		}' $filename);
+	
+		if [[ ${#seasonname} == 0 ]]; then
+			echo "$(date "+%Y-%m-%d %H:%M:%S"): -4: Kein seasonname fuer documentId='$documentId' in '$filename' gefunden." >&2
+			exit 4
+		fi
 	fi
 fi
 
-echo "$(date "+%Y-%m-%d %H:%M:%S"): Seasonname: ${saesonname}"
+seasonname=$(echo $seasonname | awk '{gsub("-Video-tgl-ab-20-",""); print $0}')
+seasonname=$(echo $seasonname | awk '{gsub("-Video",""); print $0}')
+seasonname=$(echo $seasonname | awk '{gsub("-H%C3%B6rfassung",""); print $0}')
+
+echo "$(date "+%Y-%m-%d %H:%M:%S"): Seasonnamee: ${seasonname}"
 #exit 1
 
-if [ -f "${saesonname}.done" ]; then
-    echo "$(date "+%Y-%m-%d %H:%M:%S"): -5: ${saesonname}: Video bereits geladen." >&2
+if [ -f "${seasonname}.done" ]; then
+    echo "$(date "+%Y-%m-%d %H:%M:%S"): -5: ${seasonname}: Video bereits geladen." >&2
     exit 5
 fi
 
-echo "$(date "+%Y-%m-%d %H:%M:%S"): '${saesonname}' gefunden. Starte Aufbereitung"
-start="${saesonname}"
+echo "$(date "+%Y-%m-%d %H:%M:%S"): '${seasonname}' gefunden. Starte Aufbereitung"
+start="${seasonname}"
 touch "${start}.start"
+
+seasonname=$(echo $seasonname | awk '{gsub("-"," "); print $0}')
 
 #SQL insert
 sqlite3 tatorte.sqlite <<EOSQL
-	insert into tatort_history values('${saesonname}','','',0,date('now'));
+	insert into tatort_history values('${seasonname}','','',0,date('now'));
 EOSQL
-
-saesonname=$(echo $saesonname | awk '{gsub("-"," "); print $0}')
 
 if [[ ! -f "${filenameTVDB}" ]]; then
     #TheTVDB aufrufen
@@ -219,7 +248,7 @@ if [[ ! -f "${filenameTVDB}" ]]; then
 			filenameTVDB="thetvdb.com.htm"
 			echo "TheTVDB nicht erreichbar. Verwende alten Link"
 		else
-			videoname=${saesonname}
+			videoname=${seasonname}
 			echo "$? Fehler beim Aufruf der TVDB: ${TheTVDB}. Verwende ${videoname}"
 		fi
     fi
@@ -231,7 +260,7 @@ echo "$(date "+%Y-%m-%d %H:%M:%S"): ${filenameTVDB}"
 #Kompletten Seasonname suchen
 #print "Tatort_S" season "_" name ".mp4";
 #print "href:" href " season:" season " name:" name;
-videoname=$( awk -vvname="$saesonname" '{
+videoname=$( awk -vvname="$seasonname" '{
     v=index($0,vname);
     if (v>0) {
         href=substr($0,index($0,"<a href=")+8)
@@ -249,7 +278,7 @@ videoname=$( awk -vvname="$saesonname" '{
 echo "$(date "+%Y-%m-%d %H:%M:%S"): ${videoname}"
 
 if [[ ${#videoname} == 0 ]]; then
-    videoname="${saesonname}.mp4"
+    videoname="${seasonname}.mp4"
     echo "$fulldate $?: Videoname nicht in der TVDB gefunden. Verwende ${videoname}"
 else
 
@@ -351,6 +380,11 @@ if [[ $? = 0 ]]; then
     notify-send "Speichere ${videoname}"
 fi
 
+#SQL update
+sqlite3 tatorte.sqlite <<EOSQL
+	update tatort_history set state = 2, movie_name_long = '$videoname' where movie_name='${seasonname}';
+EOSQL
+
 echo "Und los: wget '${q}' '${mediathekDL}' -O '${videoname}.filepart'"
 wget ${q} "${mediathekDL}" -O "${videoname}.filepart"
 
@@ -372,7 +406,7 @@ commissar=$(echo $videoname | awk '{split($0,a,"_"); print a[3]}')
 
 #SQL update
 sqlite3 tatorte.sqlite <<EOSQL
-	update tatort_history set state = 1, movie_name_long = '$videoname', commissar = '$commissar' where movie_name='${saesonname}';
+	update tatort_history set state = 3, commissar = '$commissar' where movie_name='${seasonname}';
 EOSQL
 
 echo "$(date "+%Y-%m-%d %H:%M:%S"): ${mediathekDL}"
