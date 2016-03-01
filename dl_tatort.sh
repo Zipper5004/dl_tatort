@@ -1,7 +1,7 @@
 #! /bin/ksh
 #benoetigt: ksh awk
 #optional: notify-send mailutils
-#script_version: 1.06
+#script_version: 1.07
 
 #variabeln
 mediathek="http://mediathek.daserste.de/suche?searchText=tatort&topRessort=-&sort=date"
